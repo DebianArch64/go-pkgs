@@ -83,20 +83,22 @@ type ServerSession struct {
 // functions. If the KeyDeivationFunction is nil, then the HashFunc will be
 // used instead.
 // The set of supported groups are:
-// 		rfc5054.1024
-//		rfc5054.1536
-//		rfc5054.2048
-//		rfc5054.3072
-//		rfc5054.4096
-//		rfc5054.6144
-//		rfc5054.8192
-// 		stanford.1024
-//		stanford.1536
-//		stanford.2048
-//		stanford.3072
-//		stanford.4096
-//		stanford.6144
-//		stanford.8192
+//
+//	rfc5054.1024
+//	rfc5054.1536
+//	rfc5054.2048
+//	rfc5054.3072
+//	rfc5054.4096
+//	rfc5054.6144
+//	rfc5054.8192
+//	stanford.1024
+//	stanford.1536
+//	stanford.2048
+//	stanford.3072
+//	stanford.4096
+//	stanford.6144
+//	stanford.8192
+//
 // The rfc5054 groups are from RFC5054
 // The stanford groups where extracted from the stanford patch to OpenSSL.
 func NewSRP(group string, h HashFunc, kd KeyDerivationFunc) (*SRP, error) {
@@ -276,11 +278,22 @@ func computeServerAuthenticator(hf HashFunc, A, M, K []byte) []byte {
 	return h.Sum(nil)
 }
 
-// ComputeAuthenticator computes an authenticator that is to be passed to the
+// ProcessClientChallenge computes an M1 token that is to be passed to the
 // server for validation
-func (cs *ClientSession) ComputeAuthenticator() []byte {
+func (cs *ClientSession) ProcessClientChallenge(username, password string, salt []byte, b []byte) []byte {
+	cs.setB(b)
+	cs.salt = salt
 	cs._M = computeClientAuthenticator(cs.SRP.HashFunc, cs.SRP.Group, cs.username, cs.salt, cs._A.Bytes(), cs._B.Bytes(), cs.key)
 	return cs._M
+}
+
+// Computes M2 token from M1. Useful if user needs to send to server to validate a match.
+func (cs *ClientSession) ComputeM2(M1 []byte) []byte {
+	h := cs.SRP.HashFunc()
+	h.Write(cs.GetA())
+	h.Write(M1)
+	h.Write(cs.GetKey())
+	return h.Sum(nil)
 }
 
 // VerifyServerAuthenticator returns true if the authenticator returned by the
