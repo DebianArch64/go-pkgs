@@ -150,11 +150,16 @@ func (s *SRP) ComputeVerifier(username, password []byte) (salt []byte, verifier 
 }
 
 // NewClientSession creates a new ClientSession.
-func (s *SRP) NewClientSession(username []byte) *ClientSession {
+func (s *SRP) NewClientSession(username []byte, a []byte) *ClientSession {
 	cs := new(ClientSession)
 	cs.SRP = s
 	cs.username = username
-	cs._a = s.gen_rand_ab()
+	if a == nil {
+		cs._a = s.gen_rand_ab()
+	} else {
+		cs._a = new(big.Int)
+		cs._a.SetBytes(a)
+	}
 
 	// g^a
 	cs._A = new(big.Int).Exp(cs.SRP.Group.Generator, cs._a, cs.SRP.Group.Prime)
@@ -252,8 +257,10 @@ func computeClientAuthenticator(hf HashFunc, grp *SRPGroup, username, salt, A, B
 	//M = H(H(N) xor H(g), H(I), s, A, B, K)
 
 	// H(N) xor H(g)
-	hn := new(big.Int).SetBytes(quickHash(hf, grp.Prime.Bytes()))
-	hg := new(big.Int).SetBytes(quickHash(hf, grp.Generator.Bytes()))
+	hn := new(big.Int).SetBytes(quickHash(hf, grp.Prime.Bytes())) // hn > hg. Make sure to pad hg.
+	hg := new(big.Int).SetBytes(quickHash(hf, pad(grp.Generator, len(grp.Prime.Bytes()))))
+	fmt.Println(len(grp.Prime.Bytes()))
+	fmt.Println(len(grp.Generator.Bytes()))
 	hng := hn.Xor(hn, hg)
 
 	hi := quickHash(hf, []byte(username))
@@ -361,6 +368,12 @@ func (ss *ServerSession) ComputeAuthenticator(cauth []byte) []byte {
 func (ss *ServerSession) VerifyClientAuthenticator(cauth []byte) bool {
 	M := computeClientAuthenticator(ss.SRP.HashFunc, ss.SRP.Group, ss.username, ss.salt, ss._A.Bytes(), ss._B.Bytes(), ss.key)
 	return subtle.ConstantTimeCompare(M, cauth) == 1
+}
+
+func pad(n *big.Int, l int) []byte {
+	size := len(n.Bytes())
+	padding := make([]byte, l-size)
+	return append(padding, n.Bytes()...)
 }
 
 func (s *SRP) pad(n *big.Int) []byte {
