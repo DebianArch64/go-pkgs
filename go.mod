@@ -1,4 +1,4 @@
-module srp
+module github.com/DebianArch64/go-pkgs
 
 go 1.21.2
 
