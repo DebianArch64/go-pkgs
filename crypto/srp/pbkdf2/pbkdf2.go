@@ -15,8 +15,9 @@
 package pbkdf2
 
 import (
-	"code.google.com/p/go.crypto/pbkdf2"
 	"hash"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // NewPBKDF2 returns a new key derivation function that uses pbkdf2 to do
