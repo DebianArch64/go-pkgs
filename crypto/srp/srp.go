@@ -283,17 +283,19 @@ func computeServerAuthenticator(hf HashFunc, A, M, K []byte) []byte {
 func (cs *ClientSession) ProcessClientChallenge(username, password string, salt []byte, b []byte) []byte {
 	cs.setB(b)
 	cs.salt = salt
+	if cs.key == nil {
+		var err error
+		if cs.key, err = cs.ComputeKey(salt, b); err != nil {
+			return nil
+		}
+	}
 	cs._M = computeClientAuthenticator(cs.SRP.HashFunc, cs.SRP.Group, cs.username, cs.salt, cs._A.Bytes(), cs._B.Bytes(), cs.key)
 	return cs._M
 }
 
 // Computes M2 token from M1. Useful if user needs to send to server to validate a match.
-func (cs *ClientSession) ComputeM2(M1 []byte) []byte {
-	h := cs.SRP.HashFunc()
-	h.Write(cs.GetA())
-	h.Write(M1)
-	h.Write(cs.GetKey())
-	return h.Sum(nil)
+func (cs *ClientSession) ComputeAuthenticator(M1 []byte) []byte {
+	return computeServerAuthenticator(cs.SRP.HashFunc, cs.GetA(), M1, cs.GetKey())
 }
 
 // VerifyServerAuthenticator returns true if the authenticator returned by the
