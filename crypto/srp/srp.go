@@ -39,12 +39,11 @@ type HashFunc func() hash.Hash
 // instance is created.
 // Instances of SRP are safe for concurrent use.
 type SRP struct {
-	SaltLength        int  // The size of the salt in bytes
-	ABSize            uint // The size of a and b in bits
-	HashFunc          HashFunc
-	KeyDerivationFunc KeyDerivationFunc
-	Group             *SRPGroup
-	_k                *big.Int
+	SaltLength int  // The size of the salt in bytes
+	ABSize     uint // The size of a and b in bits
+	HashFunc   HashFunc
+	Group      *SRPGroup
+	_k         *big.Int
 }
 
 // ClientSession represents the client side of an SRP authentication session.
@@ -54,7 +53,6 @@ type ClientSession struct {
 	SRP      *SRP
 	username []byte
 	salt     []byte
-	password []byte
 	_a       *big.Int
 	_A       *big.Int
 	_B       *big.Int
@@ -113,18 +111,14 @@ func NewSRP(group string, h HashFunc, kd KeyDerivationFunc) (*SRP, error) {
 	srp.Group = grp
 
 	srp.compute_k()
-
-	if kd == nil {
-		kd = func(salt, password []byte) []byte {
-			h := srp.HashFunc()
-			h.Write(salt)
-			h.Write(password)
-			return h.Sum(nil)
-		}
-	}
-	srp.KeyDerivationFunc = kd
-
 	return srp, nil
+}
+
+func (srp *SRP) keyDerivation(salt, password []byte) []byte {
+	h := srp.HashFunc()
+	h.Write(salt)
+	h.Write(password)
+	return h.Sum(nil)
 }
 
 // utility function that hashes the provided data with the provided hashfunction,
@@ -137,7 +131,7 @@ func quickHash(hf HashFunc, data []byte) []byte {
 
 // ComputeVerifier generates a random salt and computes the verifier value that
 // is associated with the user on the server.
-func (s *SRP) ComputeVerifier(password []byte) (salt []byte, verifier []byte, err error) {
+func (s *SRP) ComputeVerifier(username, password []byte) (salt []byte, verifier []byte, err error) {
 	//  x = H(s, p)               (s is chosen randomly)
 	salt = make([]byte, s.SaltLength)
 	n, err := io.ReadFull(rand.Reader, salt)
@@ -149,18 +143,17 @@ func (s *SRP) ComputeVerifier(password []byte) (salt []byte, verifier []byte, er
 	}
 
 	//  v = g^x                   (computes password verifier)
-	x := new(big.Int).SetBytes(s.KeyDerivationFunc(salt, password))
+	x := new(big.Int).SetBytes(s.keyDerivation(salt, s.compute_identity(username, password)))
 	v := new(big.Int).Exp(s.Group.Generator, x, s.Group.Prime)
 
 	return salt, v.Bytes(), nil
 }
 
 // NewClientSession creates a new ClientSession.
-func (s *SRP) NewClientSession(username, password []byte) *ClientSession {
+func (s *SRP) NewClientSession(username []byte) *ClientSession {
 	cs := new(ClientSession)
 	cs.SRP = s
 	cs.username = username
-	cs.password = password
 	cs._a = s.gen_rand_ab()
 
 	// g^a
@@ -212,7 +205,7 @@ func (cs *ClientSession) setB(B []byte) error {
 }
 
 // ComputeKey computes the session key given the salt and the value of B.
-func (cs *ClientSession) ComputeKey(salt, B []byte) ([]byte, error) {
+func (cs *ClientSession) ComputeKey(salt, B, password []byte, noUsername bool) ([]byte, error) {
 	cs.salt = salt
 
 	err := cs.setB(B)
@@ -220,8 +213,13 @@ func (cs *ClientSession) ComputeKey(salt, B []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// x = H(s, p)                 (user enters password)
-	x := new(big.Int).SetBytes(cs.SRP.KeyDerivationFunc(cs.salt, cs.password))
+	// x = H(s, H(I ":" p))                 (user enters password)
+	var x *big.Int
+	if noUsername {
+		x = new(big.Int).SetBytes(cs.SRP.keyDerivation(cs.salt, cs.SRP.compute_identity(nil, password)))
+	} else {
+		x = new(big.Int).SetBytes(cs.SRP.keyDerivation(cs.salt, cs.SRP.compute_identity(cs.username, password)))
+	}
 
 	// S = (B - kg^x) ^ (a + ux)   (computes session key)
 	// t1 = g^x
@@ -280,13 +278,12 @@ func computeServerAuthenticator(hf HashFunc, A, M, K []byte) []byte {
 
 // ProcessClientChallenge computes an M1 token that is to be passed to the
 // server for validation
-func (cs *ClientSession) ProcessClientChallenge(username, password, salt, b []byte) []byte {
+func (cs *ClientSession) ProcessClientChallenge(username, password, salt, b []byte, noUsername bool) []byte {
 	cs.setB(b)
 	cs.salt = salt
-	cs.password = password
 	if cs.key == nil {
 		var err error
-		if cs.key, err = cs.ComputeKey(salt, b); err != nil {
+		if cs.key, err = cs.ComputeKey(salt, b, password, noUsername); err != nil {
 			return nil
 		}
 	}
@@ -383,6 +380,16 @@ func (s *SRP) compute_u(A, B *big.Int) *big.Int {
 	h.Write(s.pad(A))
 	h.Write(s.pad(B))
 	return new(big.Int).SetBytes(h.Sum(nil))
+}
+
+func (s *SRP) compute_identity(username, password []byte) []byte {
+	h := s.HashFunc()
+	if username != nil {
+		h.Write(username)
+	}
+	h.Write([]byte(":"))
+	h.Write(password)
+	return h.Sum(nil)
 }
 
 func (s *SRP) compute_k() {

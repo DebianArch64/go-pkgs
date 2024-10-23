@@ -61,14 +61,14 @@ func testSRP(t *testing.T, group string, h func() hash.Hash, username, password 
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs := srp.NewClientSession(username, password)
-	salt, v, err := srp.ComputeVerifier(password)
+	cs := srp.NewClientSession(username)
+	salt, v, err := srp.ComputeVerifier(username, password)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ss := srp.NewServerSession(username, salt, v)
 
-	ckey, err := cs.ComputeKey(salt, ss.GetB())
+	ckey, err := cs.ComputeKey(salt, ss.GetB(), password, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func testSRP(t *testing.T, group string, h func() hash.Hash, username, password 
 			group, h().Size(), ckey, skey)
 	}
 
-	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB())
+	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB(), false)
 	if !ss.VerifyClientAuthenticator(cauth) {
 		t.Fatal("Client Authenticator is not valid")
 	}

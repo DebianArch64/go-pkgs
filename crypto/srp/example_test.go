@@ -17,27 +17,30 @@ package srp
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"log"
+	"os"
+	"testing"
 )
 
-func ExampleNewSRP() {
+func TestNewSRP(*testing.T) {
 	username := []byte("example")
 	password := []byte("3x@mp1e")
 
-	srp, err := NewSRP("rfc5054.3072", sha256.New, nil)
+	srp, err := NewSRP("rfc5054.2048", sha256.New, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cs := srp.NewClientSession(username, password)
-	salt, v, err := srp.ComputeVerifier(password)
+	cs := srp.NewClientSession(username)
+	salt, v, err := srp.ComputeVerifier(username, password)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ss := srp.NewServerSession(username, salt, v)
 
-	ckey, err := cs.ComputeKey(salt, ss.GetB())
+	ckey, err := cs.ComputeKey(salt, ss.GetB(), password, false)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,10 +52,15 @@ func ExampleNewSRP() {
 	}
 	log.Printf("The Server's computed session key is: %v\n", skey)
 
-	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB())
+	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB(), false)
 	if !ss.VerifyClientAuthenticator(cauth) {
 		log.Fatal("Client Authenticator is not valid")
 	}
+
+	os.WriteFile("a.bin", cs.GetA(), 0777)
+	os.WriteFile("b.bin", ss.GetB(), 0777)
+	os.WriteFile("salt.bin", cs.salt, 0777)
+	log.Println("m1: " + base64.StdEncoding.EncodeToString(cauth))
 	sauth := ss.ComputeAuthenticator(cauth)
 	if !cs.VerifyServerAuthenticator(sauth) {
 		log.Fatal("Server Authenticator is not valid")
