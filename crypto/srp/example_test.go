@@ -49,7 +49,7 @@ func ExampleNewSRP() {
 	}
 	log.Printf("The Server's computed session key is: %v\n", skey)
 
-	cauth := cs.ProcessClientChallenge(string(username), string(password), salt, ss.GetB())
+	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB())
 	if !ss.VerifyClientAuthenticator(cauth) {
 		log.Fatal("Client Authenticator is not valid")
 	}

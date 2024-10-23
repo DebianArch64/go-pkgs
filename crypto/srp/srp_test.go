@@ -92,7 +92,7 @@ func testSRP(t *testing.T, group string, h func() hash.Hash, username, password 
 			group, h().Size(), ckey, skey)
 	}
 
-	cauth := cs.ProcessClientChallenge(string(username), string(password), salt, ss.GetB())
+	cauth := cs.ProcessClientChallenge(username, password, salt, ss.GetB())
 	if !ss.VerifyClientAuthenticator(cauth) {
 		t.Fatal("Client Authenticator is not valid")
 	}

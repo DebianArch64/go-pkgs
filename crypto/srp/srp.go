@@ -280,15 +280,17 @@ func computeServerAuthenticator(hf HashFunc, A, M, K []byte) []byte {
 
 // ProcessClientChallenge computes an M1 token that is to be passed to the
 // server for validation
-func (cs *ClientSession) ProcessClientChallenge(username, password string, salt []byte, b []byte) []byte {
+func (cs *ClientSession) ProcessClientChallenge(username, password, salt, b []byte) []byte {
 	cs.setB(b)
 	cs.salt = salt
+	cs.password = password
 	if cs.key == nil {
 		var err error
 		if cs.key, err = cs.ComputeKey(salt, b); err != nil {
 			return nil
 		}
 	}
+
 	cs._M = computeClientAuthenticator(cs.SRP.HashFunc, cs.SRP.Group, cs.username, cs.salt, cs._A.Bytes(), cs._B.Bytes(), cs.key)
 	return cs._M
 }
